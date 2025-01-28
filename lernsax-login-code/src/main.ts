@@ -1,14 +1,17 @@
 globalThis.crypto ??= require('node:crypto').webcrypto;
 var path = require('path');
 
+// Application ID
 const appID: string = 'test';
 
+// Define the response structure
 type ResponseValue =
   | { type: 'none' }
   | { type: 'loading' }
   | { type: 'error'; message: string }
   | { type: 'success'; name: string; session_id: string | undefined };
 
+// Interface for file/folder entries
 interface Entry {
   id: string;
   parent_id: string;
@@ -28,6 +31,7 @@ interface Entry {
   preview: number;
 }
 
+// Main class for Lernsax API
 class LernsaxAPI {
   session_id: string | undefined;
   id_counter: number;
@@ -48,6 +52,7 @@ class LernsaxAPI {
     this.entries = [];
     this.login_focus = '';
 
+    // Attempt to retrieve login token from local storage
     try {
       this.token = localStorage.getItem('lernsaxapi_login_token') || undefined;
     } catch (error) {
@@ -55,9 +60,9 @@ class LernsaxAPI {
     }
   }
 
+  // Create a JSON-RPC request
   mkReq(method: string, params: Object = {}) {
     this.id_counter += 1;
-
     return {
       jsonrpc: '2.0',
       method: method,
@@ -66,6 +71,7 @@ class LernsaxAPI {
     };
   }
 
+  // Perform a network request
   async doRequest(requestJson: any) {
     const response = await fetch('https://www.lernsax.de/jsonrpc.php', {
       method: 'POST',
@@ -73,18 +79,32 @@ class LernsaxAPI {
       body: JSON.stringify(requestJson),
       mode: 'cors',
     });
-
     return await response.json();
   }
 
+  // Set login parameters
   setLoginParams(email: string, password: string) {
     this.email = email;
     this.password = password;
   }
 
+  // Utility to handle common request and response structure
+  async handleRequest(requests: any[]): Promise<any> {
+    const responseJson = await this.doRequest(requests);
+    if (!Array.isArray(responseJson) || responseJson.length < requests.length) {
+      return {
+        type: 'error',
+        message: 'Invalid response from server',
+      };
+    }
+    return responseJson;
+  }
+
+  // Perform login request
   async performLoginRequest(): Promise<ResponseValue> {
     let requestLoginJSON = [];
 
+    // Check if login token or email/password is provided
     if (
       this.token == undefined ||
       this.email != undefined ||
@@ -103,8 +123,9 @@ class LernsaxAPI {
       );
       requestLoginJSON.push(this.mkReq('get_nonce'));
 
-      let responseJson = await this.doRequest(requestLoginJSON);
+      let responseJson = await this.handleRequest(requestLoginJSON);
 
+      // Handle login error
       if (responseJson[0].result?.error) {
         return {
           type: 'error',
@@ -112,8 +133,8 @@ class LernsaxAPI {
         };
       }
 
+      // Save retrieved token and nonce
       this.token = responseJson[2].result.trust.token;
-
       try {
         localStorage.setItem('lernsaxapi_login_token', this.token as string);
       } catch {}
@@ -126,10 +147,10 @@ class LernsaxAPI {
     }
     requestLoginJSON = [];
 
+    // Generate salt and hash for authentication
     const salt = btoa(
       String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16)))
     );
-
     const message = this.nonce.key + salt + this.token;
     const msgBuffer = new TextEncoder().encode(message);
     const hashBuf = await crypto.subtle.digest('SHA-256', msgBuffer);
@@ -137,6 +158,7 @@ class LernsaxAPI {
       .map((b) => b.toString(16).padStart(2, '0'))
       .join('');
 
+    // Create login request with authentication details
     requestLoginJSON.push(
       this.mkReq('login', {
         login: this.email,
@@ -150,8 +172,9 @@ class LernsaxAPI {
     requestLoginJSON.push(this.mkReq('set_focus', { object: 'trusts' }));
     requestLoginJSON.push(this.mkReq('get_information'));
 
-    let responseJson = await this.doRequest(requestLoginJSON);
+    let responseJson = await this.handleRequest(requestLoginJSON);
 
+    // Handle login error
     if (responseJson[0].result?.error) {
       return {
         type: 'error',
@@ -159,6 +182,7 @@ class LernsaxAPI {
       };
     }
 
+    // Save session ID
     this.session_id = responseJson[2].result.session_id;
 
     return {
@@ -168,6 +192,7 @@ class LernsaxAPI {
     };
   }
 
+  // Fetch files from the server
   async fetchFiles(setLogin: string = ''): Promise<any> {
     if (this.session_id == undefined) {
       return {
@@ -179,7 +204,6 @@ class LernsaxAPI {
     this.login_focus = setLogin;
 
     let requestJson = [];
-
     requestJson.push(
       this.mkReq('set_session', { session_id: this.session_id })
     );
@@ -188,20 +212,15 @@ class LernsaxAPI {
     );
     requestJson.push(this.mkReq('get_entries'));
 
-    const responseJson = await this.doRequest(requestJson);
+    const responseJson = await this.handleRequest(requestJson);
 
-    if (!Array.isArray(responseJson) || responseJson.length != 3) {
-      return {
-        type: 'error',
-        message: 'Invalid response from server',
-      };
-    }
+    if (responseJson.type === 'error') return responseJson;
 
     this.entries = responseJson[2].result.entries;
-
     return responseJson[2].result.entries;
   }
 
+  // Download a file
   async downloadFile(file_id: string): Promise<any> {
     if (this.session_id == undefined) {
       return {
@@ -211,7 +230,6 @@ class LernsaxAPI {
     }
 
     let requestJson = [];
-
     requestJson.push(
       this.mkReq('set_session', { session_id: this.session_id })
     );
@@ -220,11 +238,10 @@ class LernsaxAPI {
     );
     requestJson.push(this.mkReq('get_file', { id: file_id }));
 
-    const responseJson = await this.doRequest(requestJson);
+    const responseJson = await this.handleRequest(requestJson);
 
     if (
-      !Array.isArray(responseJson) ||
-      responseJson.length != 3 ||
+      responseJson.type === 'error' ||
       responseJson[2].result.return != 'OK'
     ) {
       return {
@@ -234,7 +251,6 @@ class LernsaxAPI {
     }
 
     const binaryData = Buffer.from(responseJson[2].result.file.data, 'base64');
-
     return {
       type: 'success',
       filename: responseJson[2].result.file.name,
@@ -242,6 +258,7 @@ class LernsaxAPI {
     };
   }
 
+  // Upload a new file
   async uploadNewFile(
     data: string,
     filename: string,
@@ -257,7 +274,6 @@ class LernsaxAPI {
     const base64Data = Buffer.from(data, 'binary').toString('base64');
 
     let requestJson = [];
-
     requestJson.push(
       this.mkReq('set_session', { session_id: this.session_id })
     );
@@ -272,11 +288,10 @@ class LernsaxAPI {
       })
     );
 
-    const responseJson = await this.doRequest(requestJson);
+    const responseJson = await this.handleRequest(requestJson);
 
     if (
-      !Array.isArray(responseJson) ||
-      responseJson.length != 3 ||
+      responseJson.type === 'error' ||
       responseJson[2].result.return != 'OK'
     ) {
       return {
@@ -286,12 +301,12 @@ class LernsaxAPI {
     }
 
     await this.fetchFiles();
-
     return {
       type: 'success',
     };
   }
 
+  // Add a new folder
   async addFolder(
     folder_name: string,
     parent_folder_name: string
@@ -306,7 +321,6 @@ class LernsaxAPI {
     const parent_folder_id = this.getObjectId(parent_folder_name);
 
     let requestJson = [];
-
     requestJson.push(
       this.mkReq('set_session', { session_id: this.session_id })
     );
@@ -320,11 +334,10 @@ class LernsaxAPI {
       })
     );
 
-    const responseJson = await this.doRequest(requestJson);
+    const responseJson = await this.handleRequest(requestJson);
 
     if (
-      !Array.isArray(responseJson) ||
-      responseJson.length != 3 ||
+      responseJson.type === 'error' ||
       responseJson[2].result.return != 'OK'
     ) {
       return {
@@ -334,12 +347,12 @@ class LernsaxAPI {
     }
 
     await this.fetchFiles();
-
     return {
       type: 'success',
     };
   }
 
+  // Delete a file
   async deleteFile(file_id: string) {
     if (this.session_id == undefined) {
       return {
@@ -349,7 +362,6 @@ class LernsaxAPI {
     }
 
     let requestJson = [];
-
     requestJson.push(
       this.mkReq('set_session', { session_id: this.session_id })
     );
@@ -363,10 +375,10 @@ class LernsaxAPI {
       })
     );
 
-    const responseJson = await this.doRequest(requestJson);
+    const responseJson = await this.handleRequest(requestJson);
+
     if (
-      !Array.isArray(responseJson) ||
-      responseJson.length != 3 ||
+      responseJson.type === 'error' ||
       responseJson[2].result.return != 'OK'
     ) {
       return {
@@ -376,12 +388,12 @@ class LernsaxAPI {
     }
 
     await this.fetchFiles();
-
     return {
       type: 'success',
     };
   }
 
+  // Delete a folder
   async deleteFolder(folder_path: string) {
     if (this.session_id == undefined) {
       return {
@@ -393,7 +405,6 @@ class LernsaxAPI {
     const folder_id = this.getObjectId(folder_path);
 
     let requestJson = [];
-
     requestJson.push(
       this.mkReq('set_session', { session_id: this.session_id })
     );
@@ -406,10 +417,10 @@ class LernsaxAPI {
       })
     );
 
-    const responseJson = await this.doRequest(requestJson);
+    const responseJson = await this.handleRequest(requestJson);
+
     if (
-      !Array.isArray(responseJson) ||
-      responseJson.length != 3 ||
+      responseJson.type === 'error' ||
       responseJson[2].result.return != 'OK'
     ) {
       return {
@@ -419,17 +430,16 @@ class LernsaxAPI {
     }
 
     await this.fetchFiles();
-
     return {
       type: 'success',
     };
   }
 
+  // Upload a file, replacing it if it already exists
   async uploadFile(data: string, filename: string, parent_folder_name: string) {
     const file_id = await this.getObjectId(
       path.join(parent_folder_name, filename)
     );
-
     console.log(file_id);
 
     if (file_id != 'NOTFOUND') {
@@ -437,20 +447,19 @@ class LernsaxAPI {
     }
 
     const folder_id = await this.getObjectId(parent_folder_name);
-
     const result = await this.uploadNewFile(data, filename, folder_id);
-
     return result;
   }
 
+  // Logout from the application
   async logout() {
     let requestLogoutJSON = [];
     requestLogoutJSON.push(this.mkReq('logout'));
-
-    let responseJson = await this.doRequest(requestLogoutJSON);
+    let responseJson = await this.handleRequest(requestLogoutJSON);
     return responseJson;
   }
 
+  // Get object ID based on file path
   getObjectId(filePath: string): string {
     if (filePath == '/') {
       return '/';
@@ -488,29 +497,31 @@ class LernsaxAPI {
   }
 }
 
+// Create an instance of the LernsaxAPI class
 let lernsaxAPI = new LernsaxAPI();
 
+// Main function to demonstrate usage
 const main = async () => {
   let response;
 
+  // Set login parameters
   lernsaxAPI.setLoginParams('logseq@manos-dresden.lernsax.de', 'Manos2025!');
 
+  // Perform login request
   response = await lernsaxAPI.performLoginRequest();
-
   console.log(response);
 
-  await lernsaxAPI.fetchFiles('2017-1@manos-dresden.lernsax.de');
+  // Fetch files
+  await lernsaxAPI.fetchFiles();
 
-  //let data = await lernsaxAPI.downloadFile(file_id);
-  //console.log(data.binary.toString('utf-8'));
+  // Example usage of other methods (commented out)
+  // let data = await lernsaxAPI.downloadFile(file_id);
+  // console.log(data.binary.toString('utf-8'));
 
-  //let r = await lernsaxAPI.uploadFile(
-  //  'testupload1UPDATED2',
-  //  'testUpload1.txt',
-  //  'testOrdner'
-  //);
+  // let r = await lernsaxAPI.uploadFile('testupload1UPDATED2', 'testUpload1.txt', 'testOrdner');
   let r = await lernsaxAPI.addFolder('testOrdner5', '/');
   console.log(r);
 };
 
+// Execute the main function
 main();
