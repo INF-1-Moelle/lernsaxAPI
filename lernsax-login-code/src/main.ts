@@ -94,7 +94,7 @@ class LernsaxAPI {
     if (!Array.isArray(responseJson) || responseJson.length < requests.length) {
       return {
         type: 'error',
-        message: 'Invalid response from server',
+        message: 'Server returned an invalid response. Please try again later.',
       };
     }
     return responseJson;
@@ -105,22 +105,11 @@ class LernsaxAPI {
     let requestLoginJSON = [];
 
     // Check if login token or email/password is provided
-    if (
-      this.token == undefined ||
-      this.email != undefined ||
-      this.password != undefined
-    ) {
+    if (this.token == undefined || this.email != undefined || this.password != undefined) {
       console.log('Requesting Login Token...');
-      requestLoginJSON.push(
-        this.mkReq('login', { login: this.email, password: this.password })
-      );
+      requestLoginJSON.push(this.mkReq('login', { login: this.email, password: this.password }));
       requestLoginJSON.push(this.mkReq('set_focus', { object: 'trusts' }));
-      requestLoginJSON.push(
-        this.mkReq('register_master', {
-          remote_application: appID,
-          remote_title: appID,
-        })
-      );
+      requestLoginJSON.push(this.mkReq('register_master', { remote_application: appID, remote_title: appID }));
       requestLoginJSON.push(this.mkReq('get_nonce'));
 
       let responseJson = await this.handleRequest(requestLoginJSON);
@@ -129,7 +118,7 @@ class LernsaxAPI {
       if (responseJson[0].result?.error) {
         return {
           type: 'error',
-          message: `Error: ${responseJson[0].result.error}`,
+          message: `Login failed: ${responseJson[0].result.error}. Please check your credentials and try again.`,
         };
       }
 
@@ -142,15 +131,13 @@ class LernsaxAPI {
     } else if (this.token == undefined) {
       return {
         type: 'error',
-        message: `Missing Email/Password or Login Token`,
+        message: 'Missing Email/Password or Login Token. Please provide valid credentials.',
       };
     }
     requestLoginJSON = [];
 
     // Generate salt and hash for authentication
-    const salt = btoa(
-      String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16)))
-    );
+    const salt = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16))));
     const message = this.nonce.key + salt + this.token;
     const msgBuffer = new TextEncoder().encode(message);
     const hashBuf = await crypto.subtle.digest('SHA-256', msgBuffer);
@@ -178,7 +165,7 @@ class LernsaxAPI {
     if (responseJson[0].result?.error) {
       return {
         type: 'error',
-        message: `Error: ${responseJson[0].result.error}`,
+        message: `Login failed: ${responseJson[0].result.error}. Please try again.`,
       };
     }
 
@@ -197,19 +184,15 @@ class LernsaxAPI {
     if (this.session_id == undefined) {
       return {
         type: 'error',
-        message: 'Must do login first',
+        message: 'You must be logged in to fetch files. Please log in and try again.',
       };
     }
 
     this.login_focus = setLogin;
 
     let requestJson = [];
-    requestJson.push(
-      this.mkReq('set_session', { session_id: this.session_id })
-    );
-    requestJson.push(
-      this.mkReq('set_focus', { object: 'files', login: this.login_focus })
-    );
+    requestJson.push(this.mkReq('set_session', { session_id: this.session_id }));
+    requestJson.push(this.mkReq('set_focus', { object: 'files', login: this.login_focus }));
     requestJson.push(this.mkReq('get_entries'));
 
     const responseJson = await this.handleRequest(requestJson);
@@ -225,28 +208,21 @@ class LernsaxAPI {
     if (this.session_id == undefined) {
       return {
         type: 'error',
-        message: 'Must do login first',
+        message: 'You must be logged in to download a file. Please log in and try again.',
       };
     }
 
     let requestJson = [];
-    requestJson.push(
-      this.mkReq('set_session', { session_id: this.session_id })
-    );
-    requestJson.push(
-      this.mkReq('set_focus', { object: 'files', login: this.login_focus })
-    );
+    requestJson.push(this.mkReq('set_session', { session_id: this.session_id }));
+    requestJson.push(this.mkReq('set_focus', { object: 'files', login: this.login_focus }));
     requestJson.push(this.mkReq('get_file', { id: file_id }));
 
     const responseJson = await this.handleRequest(requestJson);
 
-    if (
-      responseJson.type === 'error' ||
-      responseJson[2].result.return != 'OK'
-    ) {
+    if (responseJson.type === 'error' || responseJson[2].result.return != 'OK') {
       return {
         type: 'error',
-        message: 'Invalid response from server',
+        message: 'Failed to download the file. The server returned an invalid response.',
       };
     }
 
@@ -259,27 +235,19 @@ class LernsaxAPI {
   }
 
   // Upload a new file
-  async uploadNewFile(
-    data: string,
-    filename: string,
-    parent_folder_id: string
-  ): Promise<any> {
+  async uploadNewFile(data: string, filename: string, parent_folder_id: string): Promise<any> {
     if (this.session_id == undefined) {
       return {
         type: 'error',
-        message: 'Must do login first',
+        message: 'You must be logged in to upload a file. Please log in and try again.',
       };
     }
 
     const base64Data = Buffer.from(data, 'binary').toString('base64');
 
     let requestJson = [];
-    requestJson.push(
-      this.mkReq('set_session', { session_id: this.session_id })
-    );
-    requestJson.push(
-      this.mkReq('set_focus', { object: 'files', login: this.login_focus })
-    );
+    requestJson.push(this.mkReq('set_session', { session_id: this.session_id }));
+    requestJson.push(this.mkReq('set_focus', { object: 'files', login: this.login_focus }));
     requestJson.push(
       this.mkReq('add_file', {
         name: filename,
@@ -290,13 +258,10 @@ class LernsaxAPI {
 
     const responseJson = await this.handleRequest(requestJson);
 
-    if (
-      responseJson.type === 'error' ||
-      responseJson[2].result.return != 'OK'
-    ) {
+    if (responseJson.type === 'error' || responseJson[2].result.return != 'OK') {
       return {
         type: 'error',
-        message: 'Invalid response from server',
+        message: 'Failed to upload the file. The server returned an invalid response.',
       };
     }
 
@@ -307,26 +272,19 @@ class LernsaxAPI {
   }
 
   // Add a new folder
-  async addFolder(
-    folder_name: string,
-    parent_folder_name: string
-  ): Promise<any> {
+  async addFolder(folder_name: string, parent_folder_name: string): Promise<any> {
     if (this.session_id == undefined) {
       return {
         type: 'error',
-        message: 'Must do login first',
+        message: 'You must be logged in to add a folder. Please log in and try again.',
       };
     }
 
     const parent_folder_id = this.getObjectId(parent_folder_name);
 
     let requestJson = [];
-    requestJson.push(
-      this.mkReq('set_session', { session_id: this.session_id })
-    );
-    requestJson.push(
-      this.mkReq('set_focus', { object: 'files', login: this.login_focus })
-    );
+    requestJson.push(this.mkReq('set_session', { session_id: this.session_id }));
+    requestJson.push(this.mkReq('set_focus', { object: 'files', login: this.login_focus }));
     requestJson.push(
       this.mkReq('add_folder', {
         name: folder_name,
@@ -336,13 +294,10 @@ class LernsaxAPI {
 
     const responseJson = await this.handleRequest(requestJson);
 
-    if (
-      responseJson.type === 'error' ||
-      responseJson[2].result.return != 'OK'
-    ) {
+    if (responseJson.type === 'error' || responseJson[2].result.return != 'OK') {
       return {
         type: 'error',
-        message: 'Invalid response from server',
+        message: 'Failed to add the folder. The server returned an invalid response.',
       };
     }
 
@@ -357,17 +312,13 @@ class LernsaxAPI {
     if (this.session_id == undefined) {
       return {
         type: 'error',
-        message: 'Must do login first',
+        message: 'You must be logged in to delete a file. Please log in and try again.',
       };
     }
 
     let requestJson = [];
-    requestJson.push(
-      this.mkReq('set_session', { session_id: this.session_id })
-    );
-    requestJson.push(
-      this.mkReq('set_focus', { object: 'files', login: this.login_focus })
-    );
+    requestJson.push(this.mkReq('set_session', { session_id: this.session_id }));
+    requestJson.push(this.mkReq('set_focus', { object: 'files', login: this.login_focus }));
     requestJson.push(
       this.mkReq('delete_file', {
         id: file_id,
@@ -377,13 +328,10 @@ class LernsaxAPI {
 
     const responseJson = await this.handleRequest(requestJson);
 
-    if (
-      responseJson.type === 'error' ||
-      responseJson[2].result.return != 'OK'
-    ) {
+    if (responseJson.type === 'error' || responseJson[2].result.return != 'OK') {
       return {
         type: 'error',
-        message: 'Invalid response from server',
+        message: 'Failed to delete the file. The server returned an invalid response.',
       };
     }
 
@@ -398,19 +346,15 @@ class LernsaxAPI {
     if (this.session_id == undefined) {
       return {
         type: 'error',
-        message: 'Must do login first',
+        message: 'You must be logged in to delete a folder. Please log in and try again.',
       };
     }
 
     const folder_id = this.getObjectId(folder_path);
 
     let requestJson = [];
-    requestJson.push(
-      this.mkReq('set_session', { session_id: this.session_id })
-    );
-    requestJson.push(
-      this.mkReq('set_focus', { object: 'files', login: this.login_focus })
-    );
+    requestJson.push(this.mkReq('set_session', { session_id: this.session_id }));
+    requestJson.push(this.mkReq('set_focus', { object: 'files', login: this.login_focus }));
     requestJson.push(
       this.mkReq('delete_folder', {
         id: folder_id,
@@ -419,13 +363,10 @@ class LernsaxAPI {
 
     const responseJson = await this.handleRequest(requestJson);
 
-    if (
-      responseJson.type === 'error' ||
-      responseJson[2].result.return != 'OK'
-    ) {
+    if (responseJson.type === 'error' || responseJson[2].result.return != 'OK') {
       return {
         type: 'error',
-        message: 'Invalid response from server',
+        message: 'Failed to delete the folder. The server returned an invalid response.',
       };
     }
 
@@ -437,9 +378,7 @@ class LernsaxAPI {
 
   // Upload a file, replacing it if it already exists
   async uploadFile(data: string, filename: string, parent_folder_name: string) {
-    const file_id = await this.getObjectId(
-      path.join(parent_folder_name, filename)
-    );
+    const file_id = await this.getObjectId(path.join(parent_folder_name, filename));
     console.log(file_id);
 
     if (file_id != 'NOTFOUND') {
@@ -471,9 +410,7 @@ class LernsaxAPI {
     let possibleEntries: any[] = [];
     for (const part of filePathParts) {
       possibleEntries = this.entries
-        .filter(
-          (entry) => entry.name === part && possibleParents.includes(entry.id)
-        )
+        .filter((entry) => entry.name === part && possibleParents.includes(entry.id))
         .map((entry) => ({ id: entry.id, parent: entry.parent_id }));
       history.push(...possibleEntries);
       possibleParents = possibleEntries.map((entry) => entry.parent);
@@ -484,13 +421,8 @@ class LernsaxAPI {
     }
 
     if (possibleEntries.length === 1) {
-      const temp = history.filter((entry) =>
-        entry.id.includes(possibleEntries[0].id)
-      );
-      return temp.sort(
-        (a, b) =>
-          (a.id.match(/\//g)?.length || 0) - (b.id.match(/\//g)?.length || 0)
-      )[temp.length - 1].id;
+      const temp = history.filter((entry) => entry.id.includes(possibleEntries[0].id));
+      return temp.sort((a, b) => (a.id.match(/\//g)?.length || 0) - (b.id.match(/\//g)?.length || 0))[temp.length - 1].id;
     }
 
     return 'AMBIGIOUS';
