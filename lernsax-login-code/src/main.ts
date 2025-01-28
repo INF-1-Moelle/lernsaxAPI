@@ -36,6 +36,7 @@ class LernsaxAPI {
   token: Object | undefined;
   nonce: any;
   entries: Entry[];
+  login_focus: string;
 
   constructor() {
     this.session_id = undefined;
@@ -45,6 +46,7 @@ class LernsaxAPI {
     this.token = undefined;
     this.nonce = undefined;
     this.entries = [];
+    this.login_focus = '';
 
     try {
       this.token = localStorage.getItem('lernsaxapi_login_token') || undefined;
@@ -166,7 +168,7 @@ class LernsaxAPI {
     };
   }
 
-  async fetchFiles(): Promise<any> {
+  async fetchFiles(setLogin: string = ''): Promise<any> {
     if (this.session_id == undefined) {
       return {
         type: 'error',
@@ -174,12 +176,16 @@ class LernsaxAPI {
       };
     }
 
+    this.login_focus = setLogin;
+
     let requestJson = [];
 
     requestJson.push(
       this.mkReq('set_session', { session_id: this.session_id })
     );
-    requestJson.push(this.mkReq('set_focus', { object: 'files' }));
+    requestJson.push(
+      this.mkReq('set_focus', { object: 'files', login: this.login_focus })
+    );
     requestJson.push(this.mkReq('get_entries'));
 
     const responseJson = await this.doRequest(requestJson);
@@ -209,7 +215,9 @@ class LernsaxAPI {
     requestJson.push(
       this.mkReq('set_session', { session_id: this.session_id })
     );
-    requestJson.push(this.mkReq('set_focus', { object: 'files' }));
+    requestJson.push(
+      this.mkReq('set_focus', { object: 'files', login: this.login_focus })
+    );
     requestJson.push(this.mkReq('get_file', { id: file_id }));
 
     const responseJson = await this.doRequest(requestJson);
@@ -253,7 +261,9 @@ class LernsaxAPI {
     requestJson.push(
       this.mkReq('set_session', { session_id: this.session_id })
     );
-    requestJson.push(this.mkReq('set_focus', { object: 'files' }));
+    requestJson.push(
+      this.mkReq('set_focus', { object: 'files', login: this.login_focus })
+    );
     requestJson.push(
       this.mkReq('add_file', {
         name: filename,
@@ -300,7 +310,9 @@ class LernsaxAPI {
     requestJson.push(
       this.mkReq('set_session', { session_id: this.session_id })
     );
-    requestJson.push(this.mkReq('set_focus', { object: 'files' }));
+    requestJson.push(
+      this.mkReq('set_focus', { object: 'files', login: this.login_focus })
+    );
     requestJson.push(
       this.mkReq('add_folder', {
         name: folder_name,
@@ -341,7 +353,9 @@ class LernsaxAPI {
     requestJson.push(
       this.mkReq('set_session', { session_id: this.session_id })
     );
-    requestJson.push(this.mkReq('set_focus', { object: 'files' }));
+    requestJson.push(
+      this.mkReq('set_focus', { object: 'files', login: this.login_focus })
+    );
     requestJson.push(
       this.mkReq('delete_file', {
         id: file_id,
@@ -383,7 +397,9 @@ class LernsaxAPI {
     requestJson.push(
       this.mkReq('set_session', { session_id: this.session_id })
     );
-    requestJson.push(this.mkReq('set_focus', { object: 'files' }));
+    requestJson.push(
+      this.mkReq('set_focus', { object: 'files', login: this.login_focus })
+    );
     requestJson.push(
       this.mkReq('delete_folder', {
         id: folder_id,
@@ -483,7 +499,7 @@ const main = async () => {
 
   console.log(response);
 
-  await lernsaxAPI.fetchFiles();
+  await lernsaxAPI.fetchFiles('2017-1@manos-dresden.lernsax.de');
 
   //let data = await lernsaxAPI.downloadFile(file_id);
   //console.log(data.binary.toString('utf-8'));
@@ -493,7 +509,7 @@ const main = async () => {
   //  'testUpload1.txt',
   //  'testOrdner'
   //);
-  let r = await lernsaxAPI.addFolder('testOrdner3', '/');
+  let r = await lernsaxAPI.addFolder('testOrdner5', '/');
   console.log(r);
 };
 
